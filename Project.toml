@@ -3,8 +3,16 @@ uuid = "072aa303-1a17-46d9-b33a-08aad65a047e"
 authors = ["Julius Krumbiegel <julius.krumbiegel@gmail.com> and contributors"]
 version = "0.1.0"
 
+[deps]
+EnumX = "4e289a0a-7415-4d19-859d-a7e5c4648b56"
+EzXML = "8f5d6c58-4d21-5cfd-889c-e3ad7ee6a615"
+ObjectiveC = "e86c9b32-1129-44ac-8ea0-90d5bb39ded9"
+
 [compat]
 julia = "1"
+ObjectiveC = "0.1"
+EnumX = "1"
+EzXML = "1.1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
