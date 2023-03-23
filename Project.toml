@@ -1,0 +1,13 @@
+name = "AppleScriptingBridge"
+uuid = "072aa303-1a17-46d9-b33a-08aad65a047e"
+authors = ["Julius Krumbiegel <julius.krumbiegel@gmail.com> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
