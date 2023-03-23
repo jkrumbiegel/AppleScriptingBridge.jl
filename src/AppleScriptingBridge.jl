@@ -390,8 +390,8 @@ function generate_code(c::Class, enumsyms::Set{Symbol})
     end
 
     props = map(c.properties) do prop
-        na = lowercasefirst(join(uppercasefirst.(split(prop.name)))) |> Symbol # TODO: This will actually crash if it's not correct so _ prefix is bad
-        is_reserved_keyword(na) && (na = Symbol("_", na))
+        na = lowercasefirst(join(uppercasefirst.(split(prop.name)))) |> Symbol
+        is_reserved_keyword(na) && (na = Symbol("_", na)) # TODO: This will actually crash if it's not correct so _ prefix is bad
         types = map(prop.types) do t
             ty, isenum = translate_type(t.type, enumsyms)
             t.list && (ty = :(id{SBElementArray})) # TODO: parametric type?
