@@ -460,9 +460,14 @@ function generate_code(d::Dictionary)
         expr.args[3]::Symbol
     end)
 
+    classes = []
     for suite in d.suites
-        append!(classcode_tuples, map(c -> generate_code(c, enumsyms), suite.classes))
+        append!(classes, suite.classes)
     end
+
+    merge_same_classes!(classes)
+
+    classcode_tuples = map(c -> generate_code(c, enumsyms), classes)
 
     objcodes = getindex.(classcode_tuples, 1)
     propcodes = getindex.(classcode_tuples, 2)
@@ -473,6 +478,34 @@ function generate_code(d::Dictionary)
         Expr(:block, objcodes...),
         Expr(:block, propcodes...),
         # map(generate_code, s.commands)...,
+    )
+end
+
+# the same class can be in the standard suite and the application suite
+# for example, but we need one @objcproperties block per class
+function merge_same_classes!(classes)
+    d = Dict{String,Int}()
+    to_remove = Int[]
+    for (i, class) in enumerate(classes)
+        if haskey(d, class.name)
+            push!(to_remove, i)
+            classes[d[class.name]] = merge_classes(classes[d[class.name]], class)
+        else
+            d[class.name] = i
+        end
+    end
+    splice!(classes, to_remove)
+    return
+end
+
+function merge_classes(class1::Class, class2::Class)
+    Class(
+        class1.name,
+        class1.code,
+        class1.description,
+        [class1.respondsto; class2.respondsto],
+        [class1.properties; class2.properties],
+        [class1.elements; class2.elements],
     )
 end
 
