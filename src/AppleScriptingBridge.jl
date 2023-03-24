@@ -6,7 +6,7 @@ using ObjectiveC: load_framework, @objcwrapper, @objcproperties, id, NSString, N
 using ObjectiveC.Foundation: Foundation
 
 
-sdef(path) = parse_sdef(EzXML.readxml(path))
+sdef(appname) = parse_sdef(EzXML.parsexml(app_sdef(appname)))
 
 struct Typ
     type::String
@@ -124,7 +124,7 @@ struct Suite
 end
 
 struct Dictionary
-    title::String
+    title::Union{Nothing,String}
     suites::Vector{Suite}
 end
 
@@ -166,7 +166,7 @@ end
 
 function parse_node(::Type{Dictionary}, node, children)
     Dictionary(
-        node["title"],
+        getkey(node, "title"),
         children,
     )
 end
@@ -530,6 +530,15 @@ end
 function bundle_identifier(appname::String)::String
     command = "id of application \"$appname\""
     readchomp(`osascript -e $command`)
+end
+
+function app_path(appname::String)::String
+    command = "POSIX path of (path to application \"$appname\")"
+    readchomp(`osascript -e $command`)
+end
+
+function app_sdef(appname)::String
+    readchomp(`sdef $(app_path(appname))`)
 end
 
 end
