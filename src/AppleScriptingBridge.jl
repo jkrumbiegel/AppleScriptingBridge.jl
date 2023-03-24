@@ -381,30 +381,52 @@ function translate_type(t, enumsyms)
     return ty, isenum
 end
 
+function get_name(prop::Property)
+    na = lowercasefirst(join(uppercasefirst.(split(prop.name)))) |> Symbol
+    is_reserved_keyword(na) && (na = Symbol("_", na)) # TODO: This will actually crash if it's not correct so _ prefix is bad
+    return na
+end
+
+function get_name(el::Element)
+    typ = only(el.types)
+    @assert !typ.list
+    na = lowercasefirst(join(uppercasefirst.(split(typ.type)))) * "s" |> Symbol
+    is_reserved_keyword(na) && (na = Symbol("_", na)) # TODO: This will actually crash if it's not correct so _ prefix is bad
+    return na
+end
+
+function get_type(p::Property, enumsyms)
+    types = map(p.types) do t
+        ty, isenum = translate_type(t.type, enumsyms)
+        t.list && (ty = :(id{SBElementArray})) # TODO: parametric type?
+        (ty, isenum)
+    end
+
+    ispointertype(x) = x ∉ (NSInteger, Bool, Cdouble)
+
+    if length(types) == 1
+        type, isenum = only(types)
+        t = !ispointertype(type) || isenum ? type : :(id{$type})
+    else
+        all((type, isenum) -> ispointertype(type), types) || error("Not all pointer type: $(types)")
+        t = :(id{Union{$(first.(types)...)}})
+    end
+    return t
+end
+
+function get_type(e::Element, enumsyms)
+    :(id{SBElementArray}) # currently can't specify parametric type here
+end
+
 function generate_code(c::Class, enumsyms::Set{Symbol})
     n = split(c.name) .|> uppercasefirst |> join |> Symbol
     is_reserved_keyword(n) && (n = Symbol("_", n))
 
-    function ispointertype(x)
-        x ∉ (NSInteger, Bool, Cdouble)
-    end
-
-    props = map(c.properties) do prop
-        na = lowercasefirst(join(uppercasefirst.(split(prop.name)))) |> Symbol
-        is_reserved_keyword(na) && (na = Symbol("_", na)) # TODO: This will actually crash if it's not correct so _ prefix is bad
-        types = map(prop.types) do t
-            ty, isenum = translate_type(t.type, enumsyms)
-            t.list && (ty = :(id{SBElementArray})) # TODO: parametric type?
-            (ty, isenum)
-        end
-        if length(types) == 1
-            type, isenum = only(types)
-            t = !ispointertype(type) || isenum ? type : :(id{$type})
-        else
-            all((type, isenum) -> ispointertype(type), types) || error("Not all pointer type: $(types)")
-            t = :(id{Union{$(first.(types)...)}})
-        end
-        :(@autoproperty $na::$t)
+    props = map([c.properties; c.elements]) do x
+        name = get_name(x)
+        type = get_type(x, enumsyms)
+        
+        :(@autoproperty $name::$type)
     end
 
     objcode = :(@objcwrapper $n <: SBObject)
