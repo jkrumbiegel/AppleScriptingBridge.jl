@@ -103,6 +103,14 @@ struct Class
     elements::Vector{Element}
 end
 
+struct ClassExtension
+    extends::String
+    description::Union{Nothing,String}
+    respondsto::Vector{RespondsTo}
+    properties::Vector{Property}
+    elements::Vector{Element}
+end
+
 struct Enumerator
     name::String
     code::String
@@ -121,6 +129,7 @@ struct Suite
     description::Union{Nothing,String}
     commands::Vector{Command}
     classes::Vector{Class}
+    classextensions::Vector{ClassExtension}
     enumerations::Vector{Enumeration}
 end
 
@@ -141,6 +150,7 @@ const TYPEDICT = Dict{String,Type}(
     "suite" => Suite,
     "command" => Command,
     "class" => Class,
+    "class-extension" => ClassExtension,
     "enumeration" => Enumeration,
     "enumerator" => Enumerator,
     "value-type" => ValueType,
@@ -183,6 +193,7 @@ getkey(node, key, default = nothing) = haskey(node, key) ? node[key] : default
 function parse_node(::Type{Suite}, node, children)
     commands = extract!(Command, children)
     classes = extract!(Class, children)
+    classextensions = extract!(ClassExtension, children)
     enumerations = extract!(Enumeration, children)
     Suite(
         node["name"],
@@ -190,6 +201,7 @@ function parse_node(::Type{Suite}, node, children)
         getkey(node, "description"),
         commands,
         classes,
+        classextensions,
         enumerations,
     )
 end
@@ -217,6 +229,19 @@ function parse_node(::Type{Class}, node, children)
     Class(
         node["name"],
         node["code"],
+        getkey(node, "description"),
+        respondsto,
+        properties,
+        elements,
+    )
+end
+
+function parse_node(::Type{ClassExtension}, node, children)
+    respondsto = extract!(RespondsTo, children)
+    properties = extract!(Property, children)
+    elements = extract!(Element, children)
+    ClassExtension(
+        node["extends"],
         getkey(node, "description"),
         respondsto,
         properties,
@@ -543,14 +568,18 @@ function generate_code(d::Dictionary)
     enumerations = reduce(vcat, [s.enumerations for s in d.suites])
     enumcodes = map(generate_code, enumerations)
     
-    classes = []
-    for suite in d.suites
-        append!(classes, suite.classes)
-    end
+    classes = reduce(vcat, [s.classes for s in d.suites])
+    classextensions = reduce(vcat, [s.classextensions for s in d.suites])
 
     merge_same_classes!(classes)
+    merge_in_extensions!(classes, classextensions)
 
     typedict = make_typedict(enumerations, enumcodes, classes)
+
+    for class in classes
+        display(class)
+        println()
+    end
 
     classcode_tuples = map(c -> generate_code(c, typedict), classes)
 
@@ -581,6 +610,28 @@ function merge_same_classes!(classes)
     end
     splice!(classes, to_remove)
     return
+end
+
+function merge_in_extensions!(classes, classextensions)
+    extdict = Dict(map(c -> c.extends => c, classextensions))
+    for i in eachindex(classes)
+        c = classes[i]
+        if haskey(extdict, c.name)
+            classes[i] = merge_with_extension(c, extdict[c.name])
+        end
+    end
+    return classes
+end
+
+function merge_with_extension(c::Class, ce::ClassExtension)
+    Class(
+        c.name,
+        c.code,
+        c.description,
+        [c.respondsto; ce.respondsto],
+        [c.properties; ce.properties],
+        [c.elements; ce.elements],
+    )
 end
 
 function merge_classes(class1::Class, class2::Class)
