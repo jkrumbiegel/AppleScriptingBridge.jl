@@ -352,6 +352,8 @@ Base.size(s::SBElementArrayWrapper) = (s.x.count,)
 function Base.getindex(s::SBElementArrayWrapper{T}, i::Integer) where T
     reinterpret(T, s.x[Int(i)])
 end
+Base.show(io::IO, s::SBElementArrayWrapper{T}) where T = print(io, "SBElementArrayWrapper{$T} with $(length(s)) elements")
+Base.show(io::IO, ::MIME"text/plain", s::SBElementArrayWrapper{T}) where T = print(io, "SBElementArrayWrapper{$T} with $(length(s)) elements")
 
 # any', `text', `integer',
 # `real', `number', `boolean', `specifier', `location
@@ -457,9 +459,11 @@ end
 
 function make_propexpr(e::Element, typedict)
     name = get_name(e)
-    type = get_type(e, typedict)
-    
-    :(@autoproperty $name::$type)
+    eltype, isvaluetype  = typedict[only(e.types).type]
+    @assert !isvaluetype # expect elements to be list of classes
+    :(@getproperty $name function(obj)
+        AppleScriptingBridge.convert_result(@objc([obj::id{SBObject} $name]::id{SBElementArray}), AppleScriptingBridge.SBElementArrayWrapper{$eltype})
+    end)
 end
 
 function generate_code(c::Class, typedict::Dict)
