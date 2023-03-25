@@ -594,7 +594,7 @@ function merge_classes(class1::Class, class2::Class)
     )
 end
 
-macro generate_module_from_sdef(namespace::Symbol, sdef_path)
+macro generate_module_from_sdef(namespace::Symbol, appname)
     quote
         @eval module $namespace
             using EnumX
@@ -603,13 +603,19 @@ macro generate_module_from_sdef(namespace::Symbol, sdef_path)
             # that we need to import these is bad macro hygiene currently
             using AppleScriptingBridge: AppleScriptingBridge, SBElementArray, NSColor, NSPoint, SBObject
 
-            dict = AppleScriptingBridge.sdef($sdef_path);
+            dict = AppleScriptingBridge.sdef($appname);
 
             ex = AppleScriptingBridge.generate_code(dict)
             open("tempfile.jl", "w") do io
                 AppleScriptingBridge.prettyprint_expr(io, ex)
             end
+
             eval(ex)
+
+            function application()
+                bundleid = AppleScriptingBridge.bundle_identifier($appname)
+                Application(@objc [SBApplication applicationWithBundleIdentifier:bundleid::id{NSString}]::id{Application})
+            end
         end
     end
 end
