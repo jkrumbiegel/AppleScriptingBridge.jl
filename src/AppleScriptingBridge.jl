@@ -2,9 +2,10 @@ module AppleScriptingBridge
 
 using EzXML: EzXML
 using EnumX: EnumX
-using ObjectiveC: load_framework, @objcwrapper, @objcproperties, id, NSString, NSInteger, NSURL, nil
+using ObjectiveC: load_framework, @objcwrapper, @objcproperties, id, NSString, NSInteger, NSURL, nil, NSNumber
 using ObjectiveC.Foundation: Foundation
-
+using MacroTools: prettify
+using JuliaFormatter: format_text
 
 sdef(appname) = parse_sdef(EzXML.parsexml(app_sdef(appname)))
 
@@ -346,7 +347,7 @@ load_framework("ScriptingBridge")
 # `real', `number', `boolean', `specifier', `location
 # specifier', `record', `date', `file', `point', `rectangle',
 # `type', or `missing value'
-function translate_type(t, enumsyms)
+function translate_type(t, typedict)
     isenum = false
 
     ty = t == "text" ?
@@ -395,9 +396,9 @@ function get_name(el::Element)
     return na
 end
 
-function get_type(p::Property, enumsyms)
+function get_type(p::Property, typedict)
     types = map(p.types) do t
-        ty, isenum = translate_type(t.type, enumsyms)
+        ty, isenum = translate_type(t.type, typedict)
         t.list && (ty = :(id{SBElementArray})) # TODO: parametric type?
         (ty, isenum)
     end
@@ -414,26 +415,49 @@ function get_type(p::Property, enumsyms)
     return t
 end
 
-function get_type(e::Element, enumsyms)
+function get_type(e::Element, typedict)
     :(id{SBElementArray}) # currently can't specify parametric type here
 end
 
-function generate_code(c::Class, enumsyms::Set{Symbol})
+function extract_typeinfo(p::Property, typedict)
+    if length(p.types) == 1
+        type = only(p.types)
+        typestring = type.type
+        typeexpr, isvaluetype = typedict[typestring]
+
+        t = isvaluetype ? typeexpr : :(id{$typeexpr})
+        return t, nothing
+    else
+        return :(id{SBElementArray}), nothing
+    end
+end
+
+function make_propexpr(p::Property, typedict)
+    name = get_name(p)
+    directtype, conversionhint = extract_typeinfo(p, typedict)
+    :(@getproperty $name function(obj)
+        AppleScriptingBridge.convert_result(@objc([obj::id{SBObject} $name]::$directtype), $conversionhint)
+    end)
+end
+
+function make_propexpr(e::Element, typedict)
+    name = get_name(e)
+    type = get_type(e, typedict)
+    
+    :(@autoproperty $name::$type)
+end
+
+function generate_code(c::Class, typedict::Dict)
     n = split(c.name) .|> uppercasefirst |> join |> Symbol
     is_reserved_keyword(n) && (n = Symbol("_", n))
 
-    props = map([c.properties; c.elements]) do x
-        name = get_name(x)
-        type = get_type(x, enumsyms)
-        
-        :(@autoproperty $name::$type)
-    end
+    propexprs = map(x -> make_propexpr(x, typedict), [c.properties; c.elements])
 
     objcode = :(@objcwrapper $n <: SBObject)
 
-    propcode = :(
+    propcode = isempty(propexprs) ? :() : :(
         @objcproperties $n begin
-            $(props...)
+            $(propexprs...)
         end
     )
 
@@ -470,18 +494,36 @@ function generate_code(e::Enumeration)
     :(EnumX.@enumx $n $(values...))
 end
 
+function make_typedict(enumerations, enumcodes, classes)
+    d = Dict{String,Tuple{Any,Bool}}(
+        "text" => (NSString, false),
+        "integer" => (NSInteger, true),
+        "boolean" => (Bool, true),
+        "real" => (Cdouble, true),
+        "rectangle" => (Nothing, true),
+        "file" => (NSURL, false),
+        "RGB color" => (NSColor, false),
+        "point" => (NSPoint, false),
+        "date" => (NSDate, false),
+        "number" => (NSNumber, false),
+    )
+    for (enum, enumcode) in zip(enumerations, enumcodes)
+        enumsym = enumcode.args[3]::Symbol
+        d[enum.name] = (:($enumsym.T), true)
+    end
+    for class in classes
+        d[class.name] = transform_type_symbol(class.name), false
+    end
+    return d
+end
+
 function generate_code(d::Dictionary)
     enumcodes = []
     classcode_tuples = []
 
-    for suite in d.suites
-        append!(enumcodes, map(generate_code, suite.enumerations))
-    end
-
-    enumsyms = Set(map(enumcodes) do expr
-        expr.args[3]::Symbol
-    end)
-
+    enumerations = reduce(vcat, [s.enumerations for s in d.suites])
+    enumcodes = map(generate_code, enumerations)
+    
     classes = []
     for suite in d.suites
         append!(classes, suite.classes)
@@ -489,7 +531,9 @@ function generate_code(d::Dictionary)
 
     merge_same_classes!(classes)
 
-    classcode_tuples = map(c -> generate_code(c, enumsyms), classes)
+    typedict = make_typedict(enumerations, enumcodes, classes)
+
+    classcode_tuples = map(c -> generate_code(c, typedict), classes)
 
     objcodes = getindex.(classcode_tuples, 1)
     propcodes = getindex.(classcode_tuples, 2)
@@ -543,10 +587,16 @@ macro generate_module_from_sdef(namespace::Symbol, sdef_path)
             dict = AppleScriptingBridge.sdef($sdef_path);
 
             ex = AppleScriptingBridge.generate_code(dict)
-            display(ex)
+            open("tempfile.jl", "w") do io
+                AppleScriptingBridge.prettyprint_expr(io, ex)
+            end
             eval(ex)
         end
     end
+end
+
+function prettyprint_expr(io, ex)
+    println(io, format_text(string(prettify(ex))))
 end
 
 function bundle_identifier(appname::String)::String
@@ -561,6 +611,14 @@ end
 
 function app_sdef(appname)::String
     readchomp(`sdef $(app_path(appname))`)
+end
+
+function convert_result(i::id{T}, ::Nothing) where T
+    T(i)
+end
+
+function convert_result(x, ::Nothing)
+    x
 end
 
 end

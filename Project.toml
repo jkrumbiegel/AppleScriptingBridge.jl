@@ -6,13 +6,15 @@ version = "0.1.0"
 [deps]
 EnumX = "4e289a0a-7415-4d19-859d-a7e5c4648b56"
 EzXML = "8f5d6c58-4d21-5cfd-889c-e3ad7ee6a615"
+JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
+MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 ObjectiveC = "e86c9b32-1129-44ac-8ea0-90d5bb39ded9"
 
 [compat]
-julia = "1"
-ObjectiveC = "0.1"
 EnumX = "1"
 EzXML = "1.1"
+ObjectiveC = "0.1"
+julia = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
