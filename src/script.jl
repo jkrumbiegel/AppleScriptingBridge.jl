@@ -40,5 +40,5 @@ module CO
     # that we need to import these is bad macro hygiene currently
     using AppleScriptingBridge: AppleScriptingBridge, SBElementArray, NSColor, NSPoint, SBObject
 
-    include("tempfile.jl")
+    include("../tempfile.jl")
 end
