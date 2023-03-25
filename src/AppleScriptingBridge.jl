@@ -336,12 +336,22 @@ load_framework("ScriptingBridge")
 @objcwrapper NSColor <: Foundation.NSObject
 @objcwrapper NSPoint <: Foundation.NSObject
 @objcwrapper NSDate <: Foundation.NSObject
+@objcwrapper NSRect <: Foundation.NSObject
 @objcwrapper NSMutableArray <: Foundation.NSArray
 
 # types needed for ScriptingBridge
 @objcwrapper SBObject <: Foundation.NSObject
 @objcwrapper SBApplication <: SBObject
 @objcwrapper SBElementArray <: NSMutableArray
+
+struct SBElementArrayWrapper{T<:SBObject} <: AbstractVector{T}
+    x::SBElementArray
+end
+
+Base.size(s::SBElementArrayWrapper) = (s.x.count,)
+function Base.getindex(s::SBElementArrayWrapper{T}, i::Integer) where T
+    reinterpret(T, s.x[Int(i)])
+end
 
 # any', `text', `integer',
 # `real', `number', `boolean', `specifier', `location
@@ -359,7 +369,7 @@ function translate_type(t, typedict)
         t == "real" ?
         Cdouble :
         t == "rectangle" ?
-        Nothing : # TODO: NSRectangle?
+        NSRect :
         t == "file" ?
         NSURL :
         t == "RGB color" ?
@@ -425,8 +435,13 @@ function extract_typeinfo(p::Property, typedict)
         typestring = type.type
         typeexpr, isvaluetype = typedict[typestring]
 
-        t = isvaluetype ? typeexpr : :(id{$typeexpr})
-        return t, nothing
+        if type.list
+            t = :(id{SBElementArray})
+            return t, :(AppleScriptingBridge.SBElementArrayWrapper{$typeexpr})
+        else
+            t = isvaluetype ? typeexpr : :(id{$typeexpr})
+            return t, nothing
+        end
     else
         return :(id{SBElementArray}), nothing
     end
@@ -500,7 +515,7 @@ function make_typedict(enumerations, enumcodes, classes)
         "integer" => (NSInteger, true),
         "boolean" => (Bool, true),
         "real" => (Cdouble, true),
-        "rectangle" => (Nothing, true),
+        "rectangle" => (NSRect, false),
         "file" => (NSURL, false),
         "RGB color" => (NSColor, false),
         "point" => (NSPoint, false),
@@ -617,8 +632,16 @@ function convert_result(i::id{T}, ::Nothing) where T
     T(i)
 end
 
+function convert_result(i::id{NSString}, ::Nothing)
+    String(NSString(i))
+end
+
 function convert_result(x, ::Nothing)
     x
+end
+
+function convert_result(x::id{SBElementArray}, T::Type{<:SBElementArrayWrapper})
+    T(SBElementArray(x))
 end
 
 end
