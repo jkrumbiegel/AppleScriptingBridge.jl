@@ -101,6 +101,7 @@ struct Class
     respondsto::Vector{RespondsTo}
     properties::Vector{Property}
     elements::Vector{Element}
+    inherits::Union{Nothing,String}
 end
 
 struct ClassExtension
@@ -233,6 +234,7 @@ function parse_node(::Type{Class}, node, children)
         respondsto,
         properties,
         elements,
+        getkey(node, "inherits"),
     )
 end
 
@@ -491,13 +493,20 @@ function make_propexpr(e::Element, typedict)
     end)
 end
 
+to_classname(cname) = split(cname) .|> uppercasefirst |> join |> Symbol
+
 function generate_code(c::Class, typedict::Dict)
-    n = split(c.name) .|> uppercasefirst |> join |> Symbol
+    n = to_classname(c.name)
     is_reserved_keyword(n) && (n = Symbol("_", n))
 
     propexprs = map(x -> make_propexpr(x, typedict), [c.properties; c.elements])
 
-    objcode = :(@objcwrapper $n <: SBObject)
+    inheritance = c.inherits === nothing ||
+        c.inherits == c.name ? # this seems to be possible
+        SBObject : 
+        to_classname(c.inherits)
+
+    objcode = :(@objcwrapper $n <: $inheritance)
 
     propcode = isempty(propexprs) ? :() : :(
         @objcproperties $n begin
@@ -576,11 +585,6 @@ function generate_code(d::Dictionary)
 
     typedict = make_typedict(enumerations, enumcodes, classes)
 
-    for class in classes
-        display(class)
-        println()
-    end
-
     classcode_tuples = map(c -> generate_code(c, typedict), classes)
 
     objcodes = getindex.(classcode_tuples, 1)
@@ -631,10 +635,14 @@ function merge_with_extension(c::Class, ce::ClassExtension)
         [c.respondsto; ce.respondsto],
         [c.properties; ce.properties],
         [c.elements; ce.elements],
+        c.inherits,
     )
 end
 
 function merge_classes(class1::Class, class2::Class)
+    if class1.inherits !== nothing && class2.inherits !== nothing && class1.inherits != class2.inherits
+        error("inherits differs for $class1 and $class2")
+    end
     Class(
         class1.name,
         class1.code,
@@ -642,6 +650,7 @@ function merge_classes(class1::Class, class2::Class)
         [class1.respondsto; class2.respondsto],
         [class1.properties; class2.properties],
         [class1.elements; class2.elements],
+        class1.inherits !== nothing ? class1.inherits : class2.inherits
     )
 end
 
