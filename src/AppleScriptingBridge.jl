@@ -427,6 +427,12 @@ function get_name(prop::Property)
     return na
 end
 
+function get_name(res::RespondsTo)
+    na = lowercasefirst(join(uppercasefirst.(split(res.command)))) |> Symbol
+    is_reserved_keyword(na) && (na = Symbol("_", na)) # TODO: This will actually crash if it's not correct so _ prefix is bad
+    return na
+end
+
 function get_name(el::Element)
     typ = only(el.types)
     @assert !typ.list
@@ -484,6 +490,21 @@ function make_propexpr(p::Property, typedict)
     end)
 end
 
+struct CommandFunc
+    obj
+    f::Function
+end
+
+command_symbol(command::String) = Symbol("cmd", join(uppercasefirst.(split(command))))
+
+function make_propexpr(r::RespondsTo, typedict)
+    name = get_name(r)
+    cmdsym = command_symbol(r.command)
+    :(@getproperty $name function(obj)
+        AppleScriptingBridge.CommandFunc(obj, AppleScriptingBridge.$cmdsym)
+    end)
+end
+
 function make_propexpr(e::Element, typedict)
     name = get_name(e)
     eltype, isvaluetype  = typedict[only(e.types).type]
@@ -499,7 +520,7 @@ function generate_code(c::Class, typedict::Dict)
     n = to_classname(c.name)
     is_reserved_keyword(n) && (n = Symbol("_", n))
 
-    propexprs = map(x -> make_propexpr(x, typedict), [c.properties; c.elements])
+    propexprs = map(x -> make_propexpr(x, typedict), [c.properties; c.elements; c.respondsto])
 
     inheritance = c.inherits === nothing ||
         c.inherits == c.name ? # this seems to be possible
