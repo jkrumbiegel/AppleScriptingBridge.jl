@@ -495,13 +495,15 @@ struct CommandFunc
     f::Function
 end
 
+(c::CommandFunc)(args...; kwargs...) = c.f(c.obj, args...; kwargs...)
+
 command_symbol(command::String) = Symbol("cmd", join(uppercasefirst.(split(command))))
 
 function make_propexpr(r::RespondsTo, typedict)
     name = get_name(r)
     cmdsym = command_symbol(r.command)
     :(@getproperty $name function(obj)
-        AppleScriptingBridge.CommandFunc(obj, AppleScriptingBridge.$cmdsym)
+        AppleScriptingBridge.CommandFunc(obj, $cmdsym)
     end)
 end
 
@@ -538,13 +540,13 @@ function generate_code(c::Class, typedict::Dict)
     objcode, propcode
 end
 
-function generate_code(c::Command)
-    n = join(split(c.name), "_") |> Symbol
-    is_reserved_keyword(n) && (n = Symbol("_", n))
-
-    quote
-        @objcwrapper $n <: SBObject
-    end
+function generate_code(c::Command, typedict)
+    n = command_symbol(c.name)
+    :(
+        function $n(obj)
+            println("Hi from $($n)")
+        end
+    )
 end
 
 function transform_type_symbol(s)
@@ -611,11 +613,15 @@ function generate_code(d::Dictionary)
     objcodes = getindex.(classcode_tuples, 1)
     propcodes = getindex.(classcode_tuples, 2)
 
+    commands = reduce(vcat, [s.commands for s in d.suites])
+    commandcodes = map(c -> generate_code(c, typedict), commands)
+
     Expr(
         :block,
         Expr(:block, enumcodes...),
         Expr(:block, objcodes...),
         Expr(:block, propcodes...),
+        Expr(:block, commandcodes...),
         # map(generate_code, s.commands)...,
     )
 end
