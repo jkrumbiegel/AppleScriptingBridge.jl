@@ -2,7 +2,7 @@ module AppleScriptingBridge
 
 using EzXML: EzXML
 using EnumX: EnumX
-using ObjectiveC: load_framework, @objcwrapper, @objcproperties, id, NSString, NSInteger, NSURL, nil, NSNumber
+using ObjectiveC: load_framework, @objcwrapper, @objcproperties, id, NSString, NSInteger, NSURL, nil, NSNumber, NSObject
 using ObjectiveC.Foundation: Foundation
 using MacroTools: prettify
 using JuliaFormatter: format_text
@@ -464,9 +464,9 @@ function get_type(e::Element, typedict)
     :(id{SBElementArray}) # currently can't specify parametric type here
 end
 
-function extract_typeinfo(p::Property, typedict)
-    if length(p.types) == 1
-        type = only(p.types)
+function extract_typeinfo(types::Vector{Typ}, typedict)
+    if length(types) == 1
+        type = only(types)
         typestring = type.type
         typeexpr, isvaluetype = typedict[typestring]
 
@@ -561,13 +561,88 @@ function generate_code(c::Class, typedict::Dict)
     objcode, propcode
 end
 
-function generate_code(c::Command, typedict)
+make_direct_parameter(::Nothing) = ()
+
+function make_direct_parameter(d::DirectParameter)
+    ()
+end
+
+function generate_code(c::Command, class_set::Set{String}, typedict)
     n = command_symbol(c.name)
+    methodsym = Symbol(lowercasefirst(join(uppercasefirst.(split(c.name)))))
+    
+    # TODO
+    if is_reserved_keyword(methodsym)
+        return Expr(:block)
+    end
+
+    dp = c.directparameter
+    params = c.parameters
+
+    # this is all confusing as hell
+    if dp === nothing
+        pos_args = ()
+        if isempty(params)
+            method_args = (methodsym,)
+            kw_args = ()
+        else
+            method_args = (methodsym,)
+            kw_args = ()
+        end
+    elseif all(t -> t.type in class_set, dp.types)
+        pos_args = ()
+        # now we can leave out the direct parameter it seems
+        # but if there's at least one parameter, the name of the first parameter
+        # is included in the method name now
+        if isempty(params)
+            kw_args = ()
+            method_args = (methodsym,)
+        else
+            kw_args, param_method_args = convert_parameters(methodsym, params, typedict)
+            method_args = param_method_args
+        end
+    else
+        Parameter
+        kw_args, param_method_args = convert_parameters(params, typedict)
+        pos_args = (:direct,)
+        method_args = (:($methodsym:direct::id{NSObject}), param_method_args...)
+        # in this case we need the direct parameter explicitly
+        # but parameter names don't influence method name
+    end
+
+    returntype = Nothing
+
+    # methodexpr = 
     :(
-        function $n(obj)
-            println("Hi from $($n)")
+        function $n(obj, $(pos_args...); $(kw_args...))
+            @objc [obj::id{SBApplication} $(method_args...)]::$returntype
         end
     )
+end
+
+function convert_parameters(params::Vector{Parameter}, typedict)
+    kw_args_and_param_method_args = [convert_parameter(nothing, nothing, param, typedict) for param in params]
+    kw_args = getindex.(kw_args_and_param_method_args, 1)
+    param_method_args = getindex.(kw_args_and_param_method_args, 2)
+    return kw_args, param_method_args
+end
+
+function convert_parameters(methodsym::Symbol, params::Vector{Parameter}, typedict)
+    kw_args_and_param_method_args = [convert_parameter(i, methodsym, param, typedict) for (i, param) in enumerate(params)]
+    kw_args = getindex.(kw_args_and_param_method_args, 1)
+    param_method_args = getindex.(kw_args_and_param_method_args, 2)
+    return kw_args, param_method_args
+end
+
+function convert_parameter(i::Union{Nothing, Int}, methodsym::Union{Symbol,Nothing}, param::Parameter, typedict)
+    sym = Symbol(lowercasefirst(join(uppercasefirst.(split(param.name)))))
+    # TODO correct type
+    directtype, conversionhint = extract_typeinfo(param.types, typedict)
+    # the first arg can be merged with the methodsym depending on the direct parameter
+    slotsym = methodsym === nothing || i != 1 ? sym : Symbol(methodsym, join(uppercasefirst.(split(param.name))))
+    method_arg = :($slotsym:$sym::$directtype)
+    kwarg = param.optional ? Expr(:kw, sym, :(nil)) : sym
+    return kwarg, method_arg
 end
 
 function transform_type_symbol(s)
@@ -592,6 +667,7 @@ function generate_code(e::Enumeration)
 end
 
 function make_typedict(enumerations, enumcodes, classes)
+    # type, isvaluetype
     d = Dict{String,Tuple{Any,Bool}}(
         "text" => (NSString, false),
         "integer" => (NSInteger, true),
@@ -603,6 +679,8 @@ function make_typedict(enumerations, enumcodes, classes)
         "point" => (NSPoint, false),
         "date" => (NSDate, false),
         "number" => (NSNumber, false),
+        "type" => (NSObject, false), # not sure what's the right thing here
+        "location specifier" => (NSObject, false), # not sure what's the right thing here
     )
     for (enum, enumcode) in zip(enumerations, enumcodes)
         enumsym = enumcode.args[3]::Symbol
@@ -634,8 +712,9 @@ function generate_code(d::Dictionary)
     objcodes = getindex.(classcode_tuples, 1)
     propcodes = getindex.(classcode_tuples, 2)
 
+    class_set = Set([x.name for x in classes])
     commands = reduce(vcat, [s.commands for s in d.suites])
-    commandcodes = map(c -> generate_code(c, typedict), commands)
+    commandcodes = map(c -> generate_code(c, class_set, typedict), commands)
 
     Expr(
         :block,
