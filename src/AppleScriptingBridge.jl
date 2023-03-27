@@ -484,10 +484,26 @@ end
 
 function make_propexpr(p::Property, typedict)
     name = get_name(p)
-    directtype, conversionhint = extract_typeinfo(p, typedict)
-    :(@getproperty $name function(obj)
-        AppleScriptingBridge.convert_result(@objc([obj::id{SBObject} $name]::$directtype), $conversionhint)
-    end)
+    directtype, conversionhint = extract_typeinfo(p.types, typedict)
+    exprs = []
+    if p.access in (Access.r, Access.rw)
+        push!(
+            exprs,
+            :(@getproperty $name function(obj)
+                AppleScriptingBridge.convert_result(@objc([obj::id{SBObject} $name]::$directtype), $conversionhint)
+            end)
+        )
+    end
+    setmethodname = Symbol("set", uppercasefirst(String(name)))
+    if p.access in (Access.w, Access.rw)
+        push!(
+            exprs,
+            :(@setproperty! $name function(obj, value)
+                @objc([obj::id{SBObject} $setmethodname:value::$directtype]::Nothing)
+            end)
+        )
+    end
+    return exprs
 end
 
 struct CommandFunc
