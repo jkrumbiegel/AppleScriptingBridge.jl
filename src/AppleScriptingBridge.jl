@@ -518,18 +518,20 @@ command_symbol(command::String) = Symbol("cmd", join(uppercasefirst.(split(comma
 function make_propexpr(r::RespondsTo, typedict)
     name = get_name(r)
     cmdsym = command_symbol(r.command)
-    :(@getproperty $name function(obj)
+    ex = :(@getproperty $name function(obj)
         AppleScriptingBridge.CommandFunc(obj, $cmdsym)
     end)
+    [ex] # for vcat
 end
 
 function make_propexpr(e::Element, typedict)
     name = get_name(e)
     eltype, isvaluetype  = typedict[only(e.types).type]
     @assert !isvaluetype # expect elements to be list of classes
-    :(@getproperty $name function(obj)
+    ex = :(@getproperty $name function(obj)
         AppleScriptingBridge.convert_result(@objc([obj::id{SBObject} $name]::id{SBElementArray}), AppleScriptingBridge.SBElementArrayWrapper{$eltype})
     end)
+    [ex] # for vcat
 end
 
 to_classname(cname) = split(cname) .|> uppercasefirst |> join |> Symbol
@@ -539,6 +541,9 @@ function generate_code(c::Class, typedict::Dict)
     is_reserved_keyword(n) && (n = Symbol("_", n))
 
     propexprs = map(x -> make_propexpr(x, typedict), [c.properties; c.elements; c.respondsto])
+    if !isempty(propexprs)
+        propexprs = reduce(vcat, propexprs)
+    end
 
     inheritance = c.inherits === nothing ||
         c.inherits == c.name ? # this seems to be possible
