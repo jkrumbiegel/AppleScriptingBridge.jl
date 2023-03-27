@@ -132,6 +132,7 @@ struct Suite
     classes::Vector{Class}
     classextensions::Vector{ClassExtension}
     enumerations::Vector{Enumeration}
+    hidden::Bool
 end
 
 struct Dictionary
@@ -204,6 +205,7 @@ function parse_node(::Type{Suite}, node, children)
         classes,
         classextensions,
         enumerations,
+        getkey(node, "hidden") == "yes",
     )
 end
 
@@ -365,6 +367,7 @@ load_framework("ScriptingBridge")
 @objcwrapper NSDate <: Foundation.NSObject
 @objcwrapper NSRect <: Foundation.NSObject
 @objcwrapper NSMutableArray <: Foundation.NSArray
+@objcwrapper NSRecord <: Foundation.NSObject
 
 # types needed for ScriptingBridge
 @objcwrapper SBObject <: Foundation.NSObject
@@ -468,6 +471,9 @@ function extract_typeinfo(types::Vector{Typ}, typedict)
     if length(types) == 1
         type = only(types)
         typestring = type.type
+        if !haskey(typedict, typestring)
+            return nothing, nothing
+        end
         typeexpr, isvaluetype = typedict[typestring]
 
         if type.list
@@ -485,6 +491,10 @@ end
 function make_propexpr(p::Property, typedict)
     name = get_name(p)
     directtype, conversionhint = extract_typeinfo(p.types, typedict)
+    if directtype === nothing
+        @warn "Skipping property `$(p.name)` because type $(only(p.types).type) is unknown."
+        return []
+    end
     exprs = []
     if p.access in (Access.r, Access.rw)
         push!(
@@ -536,7 +546,7 @@ end
 
 to_classname(cname) = split(cname) .|> uppercasefirst |> join |> Symbol
 
-function generate_code(c::Class, typedict::Dict)
+function generate_code(c::Class, typedict::Dict, commanddict::Dict)
     n = to_classname(c.name)
     is_reserved_keyword(n) && (n = Symbol("_", n))
 
@@ -550,7 +560,34 @@ function generate_code(c::Class, typedict::Dict)
         SBObject : 
         to_classname(c.inherits)
 
-    objcode = :(@objcwrapper $n <: $inheritance)
+    docstring = """
+        $n
+
+    $(c.description)
+
+    ## Elements
+
+    ```
+    $(map(element_docs, c.elements)...)
+    ```
+
+    ## Properties
+
+    ```
+    $(map(prop_docs, c.properties)...)
+    ```
+
+    ## Commands
+
+    ```
+    $(map(r -> respondsto_docs(r, commanddict), c.respondsto)...)
+    ```
+    """    
+
+    objcode = quote
+        @objcwrapper $n <: $inheritance
+        @doc $docstring $n
+    end
 
     propcode = isempty(propexprs) ? :() : :(
         @objcproperties $n begin
@@ -559,6 +596,19 @@ function generate_code(c::Class, typedict::Dict)
     )
 
     objcode, propcode
+end
+
+function prop_docs(p::Property)
+    "$(get_name(p)) ($(p.access))\n"
+end
+
+function element_docs(e::Element)
+    "$(get_name(e)) ($(e.access))\n"
+end
+
+function respondsto_docs(r::RespondsTo, d::Dict{String,Command})
+    c = d[r.command]
+    "$(get_name(r))\n"
 end
 
 make_direct_parameter(::Nothing) = ()
@@ -671,6 +721,7 @@ function make_typedict(enumerations, enumcodes, classes)
     d = Dict{String,Tuple{Any,Bool}}(
         "text" => (NSString, false),
         "integer" => (NSInteger, true),
+        "double integer" => (Int128, true), # not sure
         "boolean" => (Bool, true),
         "real" => (Cdouble, true),
         "rectangle" => (NSRect, false),
@@ -679,7 +730,11 @@ function make_typedict(enumerations, enumcodes, classes)
         "point" => (NSPoint, false),
         "date" => (NSDate, false),
         "number" => (NSNumber, false),
+        "list" => (SBElementArray, false),
         "type" => (NSObject, false), # not sure what's the right thing here
+        "record" => (NSRecord, false), # not sure what's the right thing here
+        "specifier" => (NSObject, false), # not sure what's the right thing here
+        "property" => (NSObject, false), # not sure what's the right thing here
         "location specifier" => (NSObject, false), # not sure what's the right thing here
     )
     for (enum, enumcode) in zip(enumerations, enumcodes)
@@ -696,25 +751,29 @@ function generate_code(d::Dictionary)
     enumcodes = []
     classcode_tuples = []
 
-    enumerations = reduce(vcat, [s.enumerations for s in d.suites])
+    suites = [s for s in d.suites if !s.hidden]
+
+    enumerations = reduce(vcat, [s.enumerations for s in suites])
     enumcodes = map(generate_code, enumerations)
     
-    classes = reduce(vcat, [s.classes for s in d.suites])
-    classextensions = reduce(vcat, [s.classextensions for s in d.suites])
+    classes = reduce(vcat, [s.classes for s in suites])
+    classextensions = reduce(vcat, [s.classextensions for s in suites])
 
     merge_same_classes!(classes)
     merge_in_extensions!(classes, classextensions)
 
     typedict = make_typedict(enumerations, enumcodes, classes)
 
-    classcode_tuples = map(c -> generate_code(c, typedict), classes)
+    class_set = Set([x.name for x in classes])
+    commands = reduce(vcat, [s.commands for s in suites])
+    commandcodes = map(c -> generate_code(c, class_set, typedict), commands)
+
+    command_dict = Dict(c.name => c for c in commands)
+    classcode_tuples = map(c -> generate_code(c, typedict, command_dict), classes)
 
     objcodes = getindex.(classcode_tuples, 1)
     propcodes = getindex.(classcode_tuples, 2)
 
-    class_set = Set([x.name for x in classes])
-    commands = reduce(vcat, [s.commands for s in d.suites])
-    commandcodes = map(c -> generate_code(c, class_set, typedict), commands)
 
     Expr(
         :block,
@@ -782,22 +841,27 @@ function merge_classes(class1::Class, class2::Class)
 end
 
 macro generate_module_from_sdef(namespace::Symbol, appname)
+
+    dict = AppleScriptingBridge.sdef(appname);
+
+    ex = AppleScriptingBridge.generate_code(dict)
+    # open("tempfile.jl", "w") do io
+    #     AppleScriptingBridge.prettyprint_expr(io, ex)
+    # end
+
+
     quote
         @eval module $namespace
             using EnumX
             using ObjectiveC
             using ObjectiveC.Foundation
+
+            ObjectiveC.load_framework("ScriptingBridge")
+
             # that we need to import these is bad macro hygiene currently
             using AppleScriptingBridge: AppleScriptingBridge, SBElementArray, NSColor, NSPoint, SBObject
 
-            dict = AppleScriptingBridge.sdef($appname);
-
-            ex = AppleScriptingBridge.generate_code(dict)
-            open("tempfile.jl", "w") do io
-                AppleScriptingBridge.prettyprint_expr(io, ex)
-            end
-
-            eval(ex)
+            $ex
 
             function application()
                 bundleid = AppleScriptingBridge.bundle_identifier($appname)
