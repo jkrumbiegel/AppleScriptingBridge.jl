@@ -17,7 +17,8 @@ Note that you currently need the `sdef` command line utility in your path, this 
 ## Example
 
 ```julia
-ASB.@generate_module_from_sdef PH "Photos"
+using AppleScriptingBridge
+AppleScriptingBridge.@generate_module_from_sdef PH "Photos"
 ph = PH.application()
 album = ph.albums[1]
 @show album.name
