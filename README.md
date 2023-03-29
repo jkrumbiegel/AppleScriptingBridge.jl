@@ -6,6 +6,14 @@ This experimental package uses [ObjectiveC.jl](https://github.com/JuliaInterop/O
 The package parses the XML scripting definition (sdef) file for a given application and creates a module with the appropriate classes as structs and commands as functions.
 Enumerations are implemented using [EnumX.jl](https://github.com/fredrikekre/EnumX.jl/issues).
 
+## Installation
+
+Note that you currently need the `sdef` command line utility in your path, this comes with the XCode developer utilities.
+
+```julia
+]add https://github.com/jkrumbiegel/AppleScriptingBridge.jl
+```
+
 ## Example
 
 ```julia
