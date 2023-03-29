@@ -28,6 +28,7 @@ favorites = filter(mi -> mi.favorite, album.mediaItems)
 ## Bugs
 
 There are currently plenty of bugs and the implementation is still in flux.
+Be careful and try out workflows on test files first, before using it with anything important.
 It's currently easy to crash Julia if some automatically translated Objective C method signature is not quite correct, or because the interface specified in the sdef file is not really type safe.
 Also, only those commands are added to an object as `obj.command(...)` if the sdef file documents the relationship.
 However, many apps seem not to document all class which can be combined with a given command, and if you assume wrong, you get a crash.
