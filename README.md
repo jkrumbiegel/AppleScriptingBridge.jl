@@ -3,7 +3,8 @@
 [![Build Status](https://github.com/jkrumbiegel/AppleScriptingBridge.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/jkrumbiegel/AppleScriptingBridge.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 This experimental package uses [ObjectiveC.jl](https://github.com/JuliaInterop/ObjectiveC.jl) to call Apple's [ScriptingBridge](https://developer.apple.com/documentation/scriptingbridge) framework, which allows you to control applications like you normally would via AppleScript.
-The package parses the XML scripting definition (sdef) file for a given application and creates a module with the appropriate classes and commands.
+The package parses the XML scripting definition (sdef) file for a given application and creates a module with the appropriate classes as structs and commands as functions.
+Enumerations are implemented using [EnumX.jl](https://github.com/fredrikekre/EnumX.jl/issues).
 
 ## Example
 
