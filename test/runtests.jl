@@ -1,6 +1,5 @@
 using AppleScriptingBridge
 using Test
 
-@testset "AppleScriptingBridge.jl" begin
-    # Write your tests here.
-end
+ASB.@generate_module_from_sdef FI "Finder"
+finder = FI.application()
