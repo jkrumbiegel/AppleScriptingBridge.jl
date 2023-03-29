@@ -577,7 +577,7 @@ function generate_code(c::Class, typedict::Dict, commanddict::Dict)
     $(map(prop_docs, c.properties)...)
     ```
 
-    ## Commands
+    ## Responds To
 
     ```
     $(map(r -> respondsto_docs(r, commanddict), c.respondsto)...)
@@ -618,7 +618,6 @@ function make_direct_parameter(d::DirectParameter)
 end
 
 function generate_code(c::Command, class_set::Set{String}, typedict)
-    n = command_symbol(c.name)
     methodsym = Symbol(lowercasefirst(join(uppercasefirst.(split(c.name)))))
     
     # TODO
@@ -661,13 +660,35 @@ function generate_code(c::Command, class_set::Set{String}, typedict)
     end
 
     returntype = Nothing
+    description = c.description === nothing ? "No description" : c.description
+
+    direct_param = if c.directparameter === nothing
+        "No direct parameter"
+    else
+        dp = c.directparameter
+        """
+        Description: $(dp.description === nothing ? "No description available." : dp.description)
+        $(map(dp.types) do type
+            # "- $(type.list ? "list of " : "")$(typedict[type.type][1])"
+        end...)
+        """
+    end
 
     # methodexpr = 
-    :(
-        function $n(obj, $(pos_args...); $(kw_args...))
+    quote
+        """
+            $($methodsym)
+        
+        $($description)
+
+        ## Direct parameter
+
+        $($(direct_param))
+        """
+        function $methodsym(obj, $(pos_args...); $(kw_args...))
             @objc [obj::id{SBApplication} $(method_args...)]::$returntype
         end
-    )
+    end
 end
 
 function convert_parameters(params::Vector{Parameter}, typedict)
