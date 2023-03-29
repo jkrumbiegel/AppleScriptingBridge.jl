@@ -521,7 +521,7 @@ end
 
 (c::CommandFunc)(args...; kwargs...) = c.f(c.obj, args...; kwargs...)
 
-command_symbol(command::String) = Symbol("cmd", join(uppercasefirst.(split(command))))
+command_symbol(command::String) = Symbol(lowercasefirst(join(uppercasefirst.(split(command)))))
 
 function make_propexpr(r::RespondsTo, typedict)
     name = get_name(r)
