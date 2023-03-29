@@ -4,8 +4,6 @@ using EzXML: EzXML
 using EnumX: EnumX
 using ObjectiveC: load_framework, @objcwrapper, @objcproperties, id, NSString, NSInteger, NSURL, nil, NSNumber, NSObject
 using ObjectiveC.Foundation: Foundation
-using MacroTools: prettify
-using JuliaFormatter: format_text
 
 sdef(appname) = parse_sdef(EzXML.parsexml(app_sdef(appname)))
 
@@ -866,10 +864,6 @@ macro generate_module_from_sdef(namespace::Symbol, appname)
     dict = AppleScriptingBridge.sdef(appname);
 
     ex = AppleScriptingBridge.generate_code(dict)
-    # open("tempfile.jl", "w") do io
-    #     AppleScriptingBridge.prettyprint_expr(io, ex)
-    # end
-
 
     quote
         @eval module $namespace
@@ -890,10 +884,6 @@ macro generate_module_from_sdef(namespace::Symbol, appname)
             end
         end
     end
-end
-
-function prettyprint_expr(io, ex)
-    println(io, format_text(string(prettify(ex))))
 end
 
 function bundle_identifier(appname::String)::String
