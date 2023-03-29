@@ -51,3 +51,8 @@ You can try to manually call a command function with the target object as first 
 However, if you assume wrong, you will get a crash.
 Maybe future versions could do some reflection using Objective C to find out before calling if a given method is at all valid for a specific class.
 
+Also, many people say that ScriptingBridge is inherently buggy (it's also not really developed anymore).
+I'm not saying this solution is perfect, but I dislike writing AppleScript so much that I had to try this way to automate some things away for myself, which could otherwise only be done using AppleScript or JXA (which is also not very well liked).
+As I love having Julia's general purpose tools available for most other aspects of automation and I need only a small subset of AppleScript-like functionality, this tool is already useable and useful for me, but your mileage might vary (a lot) if you give it a try.
+
+If you find more bugs, you are welcome to open issues, although I'll probably not have much time to fix them for you :)
