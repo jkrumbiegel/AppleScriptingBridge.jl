@@ -2,7 +2,7 @@ module AppleScriptingBridge
 
 using EzXML: EzXML
 using EnumX: EnumX
-using ObjectiveC: load_framework, @objcwrapper, @objcproperties, id, NSString, NSInteger, NSURL, nil, NSNumber, NSObject
+using ObjectiveC: ObjectiveC, load_framework, @objcwrapper, @objcproperties, id, NSString, NSInteger, NSURL, nil, NSNumber, NSObject
 using ObjectiveC.Foundation: Foundation
 
 sdef(appname) = parse_sdef(EzXML.parsexml(app_sdef(appname)))
@@ -867,14 +867,13 @@ macro generate_module_from_sdef(namespace::Symbol, appname)
 
     quote
         @eval module $namespace
-            using EnumX
-            using ObjectiveC
-            using ObjectiveC.Foundation
-
-            ObjectiveC.load_framework("ScriptingBridge")
-
-            # that we need to import these is bad macro hygiene currently
+            # that we need to import all these is bad macro hygiene currently
             using AppleScriptingBridge: AppleScriptingBridge, SBElementArray, NSColor, NSPoint, SBObject
+            using AppleScriptingBridge.ObjectiveC
+            using AppleScriptingBridge.ObjectiveC.Foundation
+            using AppleScriptingBridge.EnumX
+
+            AppleScriptingBridge.ObjectiveC.load_framework("ScriptingBridge")
 
             $ex
 
