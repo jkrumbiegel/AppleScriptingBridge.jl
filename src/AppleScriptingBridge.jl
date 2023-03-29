@@ -482,7 +482,7 @@ function extract_typeinfo(types::Vector{Typ}, typedict)
             return t, nothing
         end
     else
-        return :(id{SBElementArray}), nothing
+        return :(id{NSObject}), nothing # generic pointer
     end
 end
 
