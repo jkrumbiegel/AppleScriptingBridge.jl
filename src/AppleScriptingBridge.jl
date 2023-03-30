@@ -870,14 +870,16 @@ macro generate_module_from_sdef(namespace::Symbol, appname)
     ex = AppleScriptingBridge.generate_code(dict)
 
     quote
-        AppleScriptingBridge.ObjectiveC.load_framework("ScriptingBridge")
-
         @eval module $namespace
             # that we need to import all these is bad macro hygiene currently
             using AppleScriptingBridge: AppleScriptingBridge, SBElementArray, NSColor, NSPoint, SBObject
             using AppleScriptingBridge.ObjectiveC
             using AppleScriptingBridge.ObjectiveC.Foundation
             using AppleScriptingBridge.EnumX
+
+            function __init__()
+                AppleScriptingBridge.ObjectiveC.load_framework("ScriptingBridge")
+            end
 
             $ex
 
