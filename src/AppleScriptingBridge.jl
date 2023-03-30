@@ -2,7 +2,7 @@ module AppleScriptingBridge
 
 using EzXML: EzXML
 using EnumX: EnumX
-using ObjectiveC: ObjectiveC, load_framework, @objcwrapper, @objcproperties, id, NSString, NSInteger, NSURL, nil, NSNumber, NSObject
+using ObjectiveC: ObjectiveC, load_framework, @objcwrapper, @objcproperties, @objc, id, NSString, NSInteger, NSURL, nil, NSNumber, NSObject
 using ObjectiveC.Foundation: Foundation
 
 sdef(appname) = parse_sdef(EzXML.parsexml(app_sdef(appname)))
@@ -482,7 +482,11 @@ function extract_typeinfo(types::Vector{Typ}, typedict)
             return t, nothing
         end
     else
-        return :(id{NSObject}), nothing # generic pointer
+        candidate_types = Tuple(map(types) do type
+            t, isval = typedict[type.type]
+            return t
+        end)
+        return :(id{SBObject}), candidate_types # generic pointer
     end
 end
 
@@ -913,6 +917,23 @@ end
 
 function convert_result(x::id{SBElementArray}, T::Type{<:SBElementArrayWrapper})
     T(SBElementArray(x))
+end
+
+typeclass(t::Type{<:ObjectiveC.Object}) = nothing
+
+function convert_result(x::id{SBObject}, typeoptions::Tuple{Vararg{Type}})
+    # this seems to be necessary to find out what the result of a query
+    # actually is, especially if it can be of multiple different types
+    # like a path that is either an NSString or an NSURL
+    _id = @objc [x::id{SBObject} get]::id{NSObject}
+    for type in typeoptions
+        class = ObjectiveC.Class(string(nameof(type)))
+        isclass = @objc [_id::id{NSObject} isKindOfClass:class::ObjectiveC.Class]::Bool
+        if isclass
+            return reinterpret(type, _id)
+        end
+    end
+    error("Could not convert id{SBObject} to one of the types in $(typeoptions)")
 end
 
 end
