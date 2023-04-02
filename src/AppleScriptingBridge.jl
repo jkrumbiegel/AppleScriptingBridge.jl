@@ -634,8 +634,8 @@ function generate_code(c::Command, class_set::Set{String}, typedict)
             method_args = (methodsym,)
             kw_args = ()
         else
-            method_args = (methodsym,)
-            kw_args = ()
+            kw_args, param_method_args = convert_parameters(methodsym, params, typedict)
+            method_args = param_method_args
         end
     elseif all(t -> t.type in class_set, dp.types)
         pos_args = ()
