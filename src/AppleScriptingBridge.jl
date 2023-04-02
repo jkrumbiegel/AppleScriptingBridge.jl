@@ -759,6 +759,7 @@ function make_typedict(enumerations, enumcodes, classes)
         "specifier" => (NSObject, false), # not sure what's the right thing here
         "property" => (NSObject, false), # not sure what's the right thing here
         "location specifier" => (NSObject, false), # not sure what's the right thing here
+        "missing value" => (NSObject, false), # not sure what's the right thing here
     )
     for (enum, enumcode) in zip(enumerations, enumcodes)
         enumsym = enumcode.args[3]::Symbol
