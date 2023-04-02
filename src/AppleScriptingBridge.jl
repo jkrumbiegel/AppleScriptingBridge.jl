@@ -626,7 +626,6 @@ function generate_code(c::Command, class_set::Set{String}, typedict)
 
     dp = c.directparameter
     params = c.parameters
-
     # this is all confusing as hell
     if dp === nothing
         pos_args = ()
@@ -757,6 +756,7 @@ function make_typedict(enumerations, enumcodes, classes)
         "property" => (NSObject, false), # not sure what's the right thing here
         "location specifier" => (NSObject, false), # not sure what's the right thing here
         "missing value" => (NSObject, false), # not sure what's the right thing here
+        "any" => (NSObject, false), # not sure what's the right thing here
     )
     for (enum, enumcode) in zip(enumerations, enumcodes)
         enumsym = enumcode.args[3]::Symbol
