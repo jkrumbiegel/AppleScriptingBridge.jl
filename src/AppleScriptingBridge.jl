@@ -622,10 +622,7 @@ end
 function generate_code(c::Command, class_set::Set{String}, typedict)
     methodsym = Symbol(lowercasefirst(join(uppercasefirst.(split(c.name)))))
     
-    # TODO
-    if is_reserved_keyword(methodsym)
-        return Expr(:block)
-    end
+    juliafunc_sym = is_reserved_keyword(methodsym) ? Symbol(methodsym, "_") : methodsym
 
     dp = c.directparameter
     params = c.parameters
@@ -679,7 +676,7 @@ function generate_code(c::Command, class_set::Set{String}, typedict)
     # methodexpr = 
     quote
         """
-            $($methodsym)
+            $($juliafunc_sym)
         
         $($description)
 
@@ -687,7 +684,7 @@ function generate_code(c::Command, class_set::Set{String}, typedict)
 
         $($(direct_param))
         """
-        function $methodsym(obj, $(pos_args...); $(kw_args...))
+        function $juliafunc_sym(obj, $(pos_args...); $(kw_args...))
             @objc [obj::id{SBApplication} $(method_args...)]::$returntype
         end
     end
